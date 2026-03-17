@@ -4,6 +4,7 @@ import asyncio
 from typing import Any, Dict
 
 import httpx
+from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -72,20 +73,25 @@ async def health() -> Dict[str, Any]:
 
 @app.post("/research")
 async def research(request: ResearchRequest) -> Dict[str, Any]:
-    """
-    Run the full research workflow for the given query and return the final state.
-    """
     query = request.query.strip()
     if not query:
         raise HTTPException(status_code=400, detail="Query must not be empty.")
 
-    # Run the synchronous graph inside the event loop executor if necessary.
-    loop = asyncio.get_event_loop()
-    result: Dict[str, Any]
-    if loop.is_running():
-        result = await loop.run_in_executor(None, run_research, query)
-    else:
-        result = run_research(query)
+    import time
 
+    start = time.time()
+
+    try:
+        loop = asyncio.get_event_loop()
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, run_research, query),
+            timeout=600.0,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Research timed out after 600s.")
+
+    result["elapsed_seconds"] = round(time.time() - start, 1)
+    result["timestamp"] = datetime.utcnow().isoformat()
+    result["model_used"] = MODEL_CONFIG.get("model", "unknown")
     return result
 

@@ -28,6 +28,18 @@ class ResearchState(TypedDict, total=False):
     # Revision cycle counter used for conditional routing in the graph
     iteration: int
 
+    # Total wall-clock run time for the research process
+    elapsed_seconds: float
+
+    # ISO timestamp for when the run was executed
+    timestamp: str
+
+    # Which LLM model produced this output
+    model_used: str
+
+    # How many times the critic requested a revision loop
+    revision_count: int
+
     # Full message history across all agents (managed by LangGraph's add_messages)
     messages: Annotated[list, add_messages]
 

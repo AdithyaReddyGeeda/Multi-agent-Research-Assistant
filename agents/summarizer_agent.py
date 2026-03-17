@@ -8,9 +8,21 @@ from agents.llm import get_llm
 from graph.state import ResearchState
 
 
+SUMMARIZER_SYSTEM_PROMPT = """You are an expert research summarizer.
+Given raw search results, extract and summarize key information.
+
+For each source, produce:
+- A 1-sentence headline capturing the main point
+- 2-3 sentences of supporting detail
+- Any key statistics, dates, or named entities mentioned
+
+Be objective, precise, and cite specific claims where possible.
+Output as a numbered list, one entry per source."""
+
+
 def summarizer_agent(state: ResearchState) -> ResearchState:
     """
-    Summarize the collected search results into clear, concise paragraphs.
+    Summarize the collected search results into clear, structured entries per source.
     """
     llm = get_llm()
     search_results: List[str] = state.get("search_results", []) or []
@@ -27,14 +39,10 @@ def summarizer_agent(state: ResearchState) -> ResearchState:
     try:
         joined_results = "\n\n---\n\n".join(search_results)
 
-        system_prompt = (
-            "You are an expert summarizer. Given search results, extract and summarize "
-            "the key facts, data points, and insights in clear concise paragraphs. "
-            "Be objective and thorough."
-        )
+        system_prompt = SUMMARIZER_SYSTEM_PROMPT
         human_prompt = (
-            "Summarize the following web search results into a small number of concise, "
-            "well-structured paragraphs focusing on the most important information.\n\n"
+            "Here are the raw web search results. Produce a numbered list as described "
+            "in your instructions, one entry per logical source.\n\n"
             f"{joined_results}"
         )
 
@@ -46,15 +54,14 @@ def summarizer_agent(state: ResearchState) -> ResearchState:
         )
         text = response.content if isinstance(response, AIMessage) else str(response)
 
-        # Keep a single composite summary as the first element.
-        summaries: List[str] = [text.strip()] if text.strip() else [
+        summaries: List[str] = [text.strip()] if text and text.strip() else [
             "Summarizer returned an empty response."
         ]
 
         return {
             "summaries": summaries,
             "messages": [
-                AIMessage(content="Summarizer agent produced summaries of search results."),
+                AIMessage(content="Summarizer agent produced structured summaries of search results."),
             ],
         }
     except Exception as exc:  # noqa: BLE001

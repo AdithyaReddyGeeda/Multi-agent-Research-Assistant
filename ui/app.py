@@ -322,7 +322,7 @@ def _init_state() -> None:
 def _post_research(query: str) -> Dict[str, Any]:
     payload = {"query": query}
     url = f"{BACKEND_URL}/research"
-    with httpx.Client(timeout=180.0) as client:
+    with httpx.Client(timeout=600.0) as client:
         resp = client.post(url, json=payload)
     resp.raise_for_status()
     return resp.json()
@@ -431,14 +431,14 @@ def _render_sidebar() -> None:
         """,
         unsafe_allow_html=True,
     )
-    examples = [
+    example_queries = [
         "Impact of LLMs on scientific research",
         "Quantum computing recent breakthroughs",
         "Climate change mitigation strategies 2025",
     ]
-    for text in examples:
-        if st.button(text, key=f"ex_{text}", use_container_width=True):
-            st.session_state.query = text
+    for eq in example_queries:
+        if st.button(eq, key=f"eq_{eq[:20]}"):
+            st.session_state.prefill_query = eq
 
 
 def _render_query_section() -> tuple[bool, str]:
@@ -446,6 +446,7 @@ def _render_query_section() -> tuple[bool, str]:
         '<div class="query-label">RESEARCH QUERY</div>',
         unsafe_allow_html=True,
     )
+    default_query = st.session_state.get("prefill_query", "")
     query = st.text_area(
         "",
         key="query",
@@ -453,9 +454,12 @@ def _render_query_section() -> tuple[bool, str]:
             "Enter your research question... e.g. "
             "What are the latest advances in multimodal AI?"
         ),
+        value=default_query,
         height=120,
         label_visibility="collapsed",
     )
+    if "prefill_query" in st.session_state:
+        del st.session_state["prefill_query"]
     col_l, col_r = st.columns([1, 1])
     with col_l:
         st.markdown(
