@@ -1,0 +1,33 @@
+from __future__ import annotations
+
+from typing import Annotated, List, TypedDict
+
+from langgraph.graph.message import add_messages
+
+
+class ResearchState(TypedDict, total=False):
+    """
+    Shared state passed between agents in the research workflow.
+    """
+
+    # User query driving the research process
+    query: str
+
+    # Raw text results from DuckDuckGo (one entry per search call)
+    search_results: List[str]
+
+    # Summaries of search results created by the summarizer agent
+    summaries: List[str]
+
+    # Feedback from the critic agent about the quality/completeness of summaries
+    critique: str
+
+    # Final synthesized research report produced by the synthesizer agent
+    final_report: str
+
+    # Revision cycle counter used for conditional routing in the graph
+    iteration: int
+
+    # Full message history across all agents (managed by LangGraph's add_messages)
+    messages: Annotated[list, add_messages]
+
