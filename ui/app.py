@@ -453,7 +453,7 @@ def _render_query_section() -> tuple[bool, str]:
     )
     default_query = st.session_state.get("prefill_query", "")
     query = st.text_area(
-        "",
+        "Research query",
         key="query",
         placeholder=(
             "Enter your research question... e.g. "
