@@ -1,83 +1,69 @@
 from __future__ import annotations
 
-from typing import List
+import logging
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Dict, List
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_community.tools import DuckDuckGoSearchRun
 
-from agents.llm import get_llm
 from graph.state import ResearchState
-from tools.search_tool import run_search
 
 
-def search_agent(state: ResearchState) -> ResearchState:
-    """
-    Use the LLM to refine the user's query into concrete web search queries,
-    then execute them via DuckDuckGo and store the raw results.
-    """
-    llm = get_llm()
-    query = state.get("query", "").strip()
+logger = logging.getLogger(__name__)
+_search = DuckDuckGoSearchRun()
 
-    if not query:
-        fallback = "No query provided to search agent."
-        return {
-            "search_results": [fallback],
-            "messages": [
-                AIMessage(content=fallback),
-            ],
-        }
 
+def _search_single(sub_query: str, index: int) -> Dict[str, Any]:
+    """Run a single DuckDuckGo search for one sub-query."""
     try:
-        system_prompt = (
-            "You are a research search specialist. Given a user research query, "
-            "propose up to 3 concrete web search queries that will retrieve the "
-            "most relevant and recent information. Return them as plain text, "
-            "one query per line."
-        )
-        human_prompt = f"User research query:\n{query}\n\nReturn 1–3 search queries, one per line."
-
-        response = llm.invoke(
-            [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=human_prompt),
-            ]
-        )
-        text = response.content if isinstance(response, AIMessage) else str(response)
-        candidate_queries: List[str] = [
-            line.strip() for line in text.splitlines() if line.strip()
-        ]
-
-        # Ensure at least the original query is searched.
-        if not candidate_queries:
-            candidate_queries = [query]
-
-        # Limit to at most 3 searches to keep things snappy.
-        candidate_queries = candidate_queries[:3]
-
-        results: List[str] = []
-        for q in candidate_queries:
-            try:
-                result_text = run_search(q)
-                results.append(f"Search query: {q}\n\n{result_text}")
-            except Exception as inner_exc:  # noqa: BLE001
-                results.append(f"Failed to fetch results for '{q}': {inner_exc}")
-
-        if not results:
-            results = ["Search agent could not retrieve any results."]
-
-        return {
-            "search_results": results,
-            "messages": [
-                AIMessage(
-                    content="Search agent completed web searches for the query."
-                ),
-            ],
-        }
+        time.sleep(index * 1.2)  # stagger requests to avoid rate limiting
+        result = _search.run(sub_query)
+        logger.info("Search %d complete: %d chars", index, len(result))
+        return {"sub_query": sub_query, "result": result, "index": index}
     except Exception as exc:  # noqa: BLE001
-        error_msg = f"Search agent encountered an error: {exc}"
+        logger.warning("Search %d failed: %s", index, exc)
         return {
-            "search_results": [error_msg],
-            "messages": [
-                AIMessage(content=error_msg),
-            ],
+            "sub_query": sub_query,
+            "result": f"Search failed for: {sub_query}",
+            "index": index,
         }
+
+
+def search_node(state: ResearchState) -> Dict[str, Any]:
+    """
+    Runs parallel DuckDuckGo searches for all sub-queries from the planner.
+    Falls back to searching the original query if no sub-queries exist.
+    """
+    sub_queries = state.get("sub_queries") or []
+    original_query = state.get("query", "")
+
+    # Fallback: if planner didn't run, search original query only
+    if not sub_queries:
+        logger.warning("No sub-queries found, falling back to original query.")
+        sub_queries = [original_query]
+
+    logger.info("Running %d parallel searches...", len(sub_queries))
+
+    results_per_query: List[Dict[str, Any]] = []
+
+    # Run searches in parallel (max 3 workers)
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {
+            executor.submit(_search_single, sq, i): i
+            for i, sq in enumerate(sub_queries)
+        }
+        for future in as_completed(futures):
+            res = future.result()
+            results_per_query.append(res)
+
+    # Sort by original index to maintain order
+    results_per_query.sort(key=lambda x: x["index"])
+    flat_results: List[str] = [r["result"] for r in results_per_query]
+
+    logger.info("All parallel searches complete.")
+    return {
+        "search_results": flat_results,
+        "search_results_per_query": results_per_query,
+    }
 

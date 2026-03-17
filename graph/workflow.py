@@ -5,7 +5,8 @@ from typing import Any, Dict
 from langgraph.graph import END, StateGraph
 
 from graph.state import ResearchState
-from agents.search_agent import search_agent
+from agents.planner_agent import planner_node
+from agents.search_agent import search_node
 from agents.summarizer_agent import summarizer_agent
 from agents.critic_agent import critic_agent
 from agents.synthesizer_agent import synthesizer_agent
@@ -31,13 +32,15 @@ def build_graph():
     builder = StateGraph(ResearchState)
 
     # Nodes
-    builder.add_node("search", search_agent)
+    builder.add_node("planner", planner_node)
+    builder.add_node("search", search_node)
     builder.add_node("summarize", summarizer_agent)
     builder.add_node("critic", critic_agent)
     builder.add_node("synthesize", synthesizer_agent)
 
-    # Edges: START -> search -> summarize -> critic
-    builder.set_entry_point("search")
+    # Edges: START -> planner -> search -> summarize -> critic
+    builder.set_entry_point("planner")
+    builder.add_edge("planner", "search")
     builder.add_edge("search", "summarize")
     builder.add_edge("summarize", "critic")
 
@@ -74,6 +77,13 @@ def run_research(query: str) -> Dict[str, Any]:
         "critique": "",
         "final_report": "",
         "iteration": 0,
+        "elapsed_seconds": 0.0,
+        "timestamp": "",
+        "model_used": "",
+        "revision_count": 0,
+        "sub_queries": [],
+        "plan_reasoning": "",
+        "search_results_per_query": [],
         "messages": [],
     }
 

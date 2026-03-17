@@ -107,14 +107,23 @@ Critic Agent  (APPROVED vs NEEDS REVISION)
 ### LangGraph Agent Flow
 
 ```mermaid
-  graph TD
-      U[User Query] --> S[Search Agent]
-      S --> SUM[Summarizer Agent]
-      SUM --> C[Critic Agent]
-      C -->|NEEDS REVISION| SUM
-      C -->|APPROVED| SYN[Synthesizer Agent]
-      SYN --> R[Final Report]
+graph TD
+    U[User Query] --> P[🧠 Planner Agent]
+    P --> |sub-query 1| S1[🔍 Search 1]
+    P --> |sub-query 2| S2[🔍 Search 2]
+    P --> |sub-query 3| S3[🔍 Search 3]
+    S1 & S2 & S3 --> |parallel| M[Merge Results]
+    M --> SUM[📝 Summarizer Agent]
+    SUM --> C[🔎 Critic Agent]
+    C -->|NEEDS REVISION| SUM
+    C -->|APPROVED| SYN[✍️ Synthesizer Agent]
+    SYN --> R[📄 Final Report]
 ```
+
+### Agents
+
+- **Planner Agent**: Decomposes the user query into 3 focused sub-queries covering background, current state, and future outlook.
+- **Search Agent**: Runs all 3 planner sub-queries in parallel using `ThreadPoolExecutor` (max 3 workers), staggered by `index * 1.2` seconds to avoid DuckDuckGo rate limiting, and merges the results for downstream agents.
 
 ## Demo
 

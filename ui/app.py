@@ -143,6 +143,7 @@ def _inject_css() -> None:
         }
         .agent-box-critic { border-color: var(--accent-amber); }
         .agent-box-synth { border-color: var(--accent-green); }
+        .agent-box-planner { border-color: #BC8CFF; }
         .agent-arrow {
             text-align: center;
             color: var(--text-secondary);
@@ -399,6 +400,10 @@ def _render_sidebar() -> None:
         """
         <div class="sidebar-card">
           <div class="sidebar-label">AGENT PIPELINE</div>
+          <div class="agent-box agent-box-planner">
+            <span>🧠 Planner</span><span style="color:#BC8CFF;">sub-queries</span>
+          </div>
+          <div class="agent-arrow">↓</div>
           <div class="agent-box">
             <span>🔍 Search</span>
             <span style="color:var(--text-secondary);">web retrieval</span>
@@ -474,6 +479,7 @@ def _render_query_section() -> tuple[bool, str]:
 def _animate_processing(start_time: float) -> None:
     placeholder = st.empty()
     agents = [
+        ("PLANNER", "🧠 Planner"),
         ("SEARCH", "🔍 Search"),
         ("SUMMARIZER", "📝 Summarizer"),
         ("CRITIC", "🔎 Critic"),
@@ -513,9 +519,54 @@ def _animate_processing(start_time: float) -> None:
         _append_log(f"[{elapsed:05.1f}] {code:<11} → complete ✓")
 
 
+def _render_plan_tab(results: Dict[str, Any]) -> None:
+    sub_queries = results.get("sub_queries") or []
+    reasoning = results.get("plan_reasoning") or ""
+
+    st.markdown(
+        '<div style="font-family:var(--font-mono);font-size:0.72rem;'
+        'letter-spacing:0.15em;text-transform:uppercase;'
+        'color:var(--text-secondary);margin-bottom:0.75rem;">'
+        "RESEARCH PLAN</div>",
+        unsafe_allow_html=True,
+    )
+
+    if reasoning:
+        st.markdown(
+            f'<div style="background:var(--bg-secondary);border-radius:8px;'
+            f'border:1px solid var(--border);padding:0.75rem 1rem;'
+            f'font-size:0.85rem;color:var(--text-secondary);margin-bottom:1rem;">'
+            f'<span style="color:var(--accent-blue);font-family:var(--font-mono);'
+            f'font-size:0.7rem;">PLANNER REASONING</span><br/><br/>{reasoning}</div>',
+            unsafe_allow_html=True,
+        )
+
+    if not sub_queries:
+        st.write("No plan available.")
+        return
+
+    colors = ["#58A6FF", "#3FB950", "#D29922"]
+    for i, sq in enumerate(sub_queries, start=1):
+        color = colors[(i - 1) % len(colors)]
+        st.markdown(
+            f'<div style="background:var(--bg-secondary);border-radius:8px;'
+            f'border-left:3px solid {color};border-top:1px solid var(--border);'
+            f'border-right:1px solid var(--border);border-bottom:1px solid var(--border);'
+            f'padding:0.75rem 1rem;margin-bottom:0.6rem;">'
+            f'<div style="font-family:var(--font-mono);font-size:0.7rem;'
+            f'color:{color};margin-bottom:0.3rem;">SUB-QUERY {i}</div>'
+            f'<div style="font-size:0.9rem;color:var(--text-primary);">{sq}</div>'
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+
 def _render_report_tab(results: Dict[str, Any]) -> None:
     final_report = results.get("final_report") or "No final report was generated."
     query = results.get("query", "")
+    model_name = results.get("model_used", "llama3.2")
+    elapsed = results.get("elapsed_seconds", "")
+    elapsed_str = f" · {elapsed}s" if elapsed else ""
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     truncated_query = (query[:50] + "...") if len(query) > 50 else query
 
@@ -530,7 +581,7 @@ def _render_report_tab(results: Dict[str, Any]) -> None:
         unsafe_allow_html=True,
     )
     st.markdown(
-        f'<div class="report-meta">Generated · {ts} · llama3.2'
+        f'<div class="report-meta">Generated · {ts} · {model_name}{elapsed_str}'
         + (f" · {truncated_query}" if truncated_query else "")
         + "</div>",
         unsafe_allow_html=True,
@@ -669,14 +720,16 @@ def main() -> None:
 
         results = st.session_state.results
         if results:
-            tabs = st.tabs(["REPORT", "SOURCES", "AGENT LOGS", "CRITIQUE"])
+            tabs = st.tabs(["REPORT", "PLAN", "SOURCES", "AGENT LOGS", "CRITIQUE"])
             with tabs[0]:
                 _render_report_tab(results)
             with tabs[1]:
-                _render_sources_tab(results)
+                _render_plan_tab(results)
             with tabs[2]:
-                _render_logs_tab()
+                _render_sources_tab(results)
             with tabs[3]:
+                _render_logs_tab()
+            with tabs[4]:
                 _render_critique_tab(results)
 
         st.markdown(
